@@ -1,5 +1,4 @@
 # 2/9/26 MM
-
 ## Q: What data do we want to use?
 - E.g., hourly (for now)
     - Sum by adding 4 quarters
@@ -17,6 +16,7 @@
 - clean bibtex
 - LastnameYearFirstword
 
+
 ## Repo
 - manuscript
     - bibtex
@@ -26,3 +26,23 @@
 ## Re: Honors
 - metin
     -done
+
+
+# 2/16/26 MM
+- Data
+    - traffic speeds NBE
+    - Midtown in Motion EZ Pass
+    - Bridges and tunnels crossing counts
+    - DOT bridge screen volumes
+    -etc -etc
+    - DIG DIG DIG
+
+- Fallback plan
+
+- Clean the repo
+    - incl. junk
+
+- MM
+    - what have we discussed
+    - what decisioins have we made
+    - action items
