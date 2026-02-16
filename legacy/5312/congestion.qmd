@@ -1,0 +1,40 @@
+---
+
+
+---
+
+```{python}
+import pandas as pd
+import numpy as np
+```
+
+```{python}
+df = pd.read_csv('nyctraffic.csv')
+df.columns
+```
+
+Data ranges from 2000-2025.
+
+Each observation in this dataset represents the total
+traffic volume recorded by a traffic camera in a
+fifteen minute interval. There are 1,838,386 of these
+intervals recorded by ~3710 seperate cameras. These
+cameras are not necessarily consistent in time and space.
+
+```{python}
+pd.crosstab(df['Yr'],df['M'])
+```
+
+Traffic counts do not consistently populate the data until
+2009. 2025 data is present through June; populated months beyond that
+are errors.
+
+```{python}
+df = df[df['Yr'] >= 2009]
+df.loc[(df['Yr'] == 2025) & (df['M'] >= 7), 'Vol'] = pd.NA
+```
+
+```{python}
+import geopandas as gpd
+gdf = gpd.GeoDataFrame(df, geometry='WktGeom', crs='EPSG:2263')
+```

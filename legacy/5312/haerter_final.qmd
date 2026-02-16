@@ -1,0 +1,431 @@
+---
+title: 'NYC Traffic Congestion: Differences-in-Differences Approach'
+subtitle: 'ECON 5312'
+author: "Alejandro Haerter"
+date: "2025-12-07"
+output:
+  echo: false
+  pdf_document: null
+  highlight: default
+  keep_tex: no
+  fig_caption: yes
+  latex_engine: pdflatex
+  html_document:
+    df_print: paged
+execute:
+  echo: false
+  warning: false
+  message: false
+affiliation: Department of Economics, UConn
+fontsize: 11pt
+geometry: margin=1in
+---
+
+```{r}
+# import modules and data
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(tibble)
+library(sf)
+library(fixest)
+df <- read.csv('nyctraffic.csv')
+df$Vol <- as.numeric(gsub(",", "", df$Vol))   # keep comma-formatted counts
+```
+
+## Policy background and research question
+
+On January 5, 2025, the city of New York implemented a congestion pricing toll for all private and commercial vehicles entering Manhattan's Central Business District, delineated south of 60th Street (basically, all of Manhattan below Central Park). This policy has the stated goal of reducing gridlock and generating more funding for public transportation projects. New York City is the first city in the United States to implement this policy, and so NYC's outcomes will determine the feasibility of congestion pricing in other cities in the United States—if it proves successful.
+
+Details on the toll pricing can be found on [NYC311](https://portal.311.nyc.gov/article/?kanumber=KA-03612), but to summarize, the toll applies to all private and commercial vehicles. For passenger cars, it costs \$9 during peak time (weekdays 9am-9pm, weekends 9am-9pm) and \$2.25 off-peak. Discounts are offered for EZ-Pass holders and motorcycles, and commercial vehicles pay a higher rate.
+
+The NYC Automated Traffic Volume Counts dataset from NYC Open contains data from 2006 through June 2025. This gives us almost two decades of before-treatment data and six months of after-treatment data. This data structure lends itself to a Differences-in-Differences approach.
+
+My project is compiled with Quarto using RStudio. I will provide the raw .qmd file with submission if you want to see my code.
+
+## Data overview and aggregation plan
+
+The **NYC Automated Traffic Volume Counts** dataset contains 1,838,386 observations from January 2000 through June 2025. Each observation describes the traffic count recorded during a 15 minute interval at a given street, cross-street, and direction of travel.
+
+One caveat is that this data is comprised of NYC 311 service requests, so coverage varies by year and location. It is not a balanced panel; rather, it is many short traffic studies scattered across space and time. I therefore aggregate to hourly counts and restrict to years with consistent coverage.
+
+Data appear consistent from 2008 through June 2025, so I filter to that window and aggregate to the hourly level.
+
+```{r}
+hourly <- df %>%
+  group_by(RequestID, Boro, Yr, M, D, HH) %>%
+  summarize(
+    Vol = sum(Vol, na.rm = TRUE),
+    across(-Vol, first),
+    .groups = "drop"
+  ) %>%
+  select(-SegmentID, -MM) %>%
+  mutate(
+    dttm = make_datetime(year = Yr, month = M, day = D, hour = HH))  %>%
+  filter(dttm >= ymd_h("2008-01-01 00") & dttm < ymd_h("2025-07-01 00"))
+```
+
+To align the sample with the policy boundary, I next construct spatial indicators directly from the provided geometries, flagging Manhattan locations south of 60th Street. I know from a previous course that NYC Open data uses a coordinate reference system called EPSG:2263, which are similar to latitude and longitude points. I approximate the cutoff with Latitude 40.769, but this does not actually perfectly capture the treatment area. This is an area for improvement in future research.
+
+```{r}
+# flag locations south of 60th Street using geometry
+hourly <- hourly %>%
+  st_as_sf(wkt = "WktGeom", crs = 2263) %>%
+  st_transform(4326) %>%
+  mutate(
+    centroid = st_centroid(st_geometry(.)),
+    lat = st_coordinates(centroid)[, 2],
+    south60 = as.integer(Boro == "Manhattan" & lat < 40.769),
+    manhattan_zone = case_when(
+      south60 == 1 ~ "South of 60th",
+      Boro == "Manhattan" ~ "North of 60th",
+      TRUE ~ "Other boroughs"
+    )
+  ) %>%
+  st_drop_geometry()
+```
+
+```{r}
+print(table(hourly$Yr, hourly$M))
+```
+
+After data cleaning, we are left with 292,878 hours of traffic data, split between 286,494 hours and 6384 hours of pre and post data, respectively.
+
+```{r}
+sample_overview <- hourly %>%
+  mutate(post = as.integer(dttm >= ymd_h("2025-01-05 00"))) %>%
+  group_by(Boro, post) %>%
+  summarise(
+    hours = n(),
+    mean_vol = mean(Vol, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(Boro, desc(post))
+
+knitr::kable(sample_overview, caption = "Sample coverage (hours and mean volumes) by borough and period (post = 1 after 2025-01-05)")
+```
+
+This table shows how the sample is distributed across boroughs before and after the policy, highlighting the limited post-period coverage.
+
+Next I define treatment and timing indicators used in the diff-in-diff setup, along with day-of-week fixed effects for time controls. A quick boxplot shows the distribution of volumes across boroughs.
+
+```{r}
+#| message: false
+#| warning: false
+hourly <- hourly %>%
+  mutate(
+    treated = as.integer(Boro == "Manhattan"),
+    post = as.integer(dttm >= ymd_h("2025-01-05 00"))
+  )
+```
+
+```{r}
+# create variables: FEs
+hourly <- hourly %>%
+  mutate(
+    dow = wday(dttm, label = TRUE)
+  )
+```
+
+```{r}
+ggplot(hourly, aes(x = Boro, y = Vol)) +
+  geom_boxplot(outlier.alpha = 0.2) +
+  scale_y_log10() +
+  theme_minimal()
+```
+
+## Model Implementation: Hourly Counts
+
+I consider a differences-in-differences regression with all traffic counts in the borough of Manhattan considered the "Treat" variable. This is done for two reasons:
+
+1.  This is spatial data, so traffic studies directly next to the actual policy area south of 60th Street will also likely show declines.
+2.  Geocoding would be required to isolate the strict policy zone. This is possible with Python and would be interesting for future research.
+
+Thus, the regression model is specified as:
+
+\begin{equation}
+\widehat{\log(1+Volume_{it})} = \beta_{0}+ \beta_{1} \text{Manhattan}_{i} + \beta_{2}Post_t + \beta_{3} (\text{Manhattan}_i \times Post_{t}) + \text{Boro}_i + \text{Month}_t + \text{Day}_t + \text{Hour}_t.
+\end{equation}
+
+$Post_t$ is the policy date January 5th, 2025. New York City's other four boroughs are used for parallel trends. Temporal fixed effects are included to control for seasonality, daily variation (weekday vs. weekend), and hourly variation (rush-hour spikes, etc.). A Borough-level entity fixed effect is included to account for inherent differences in traffic patterns.
+
+### Parallel Trend Checks
+
+Before estimating the main effect, I test for pre-trend stability using event-study specifications on the pre-period, first with the full pre sample and then restricted to the last three years before the policy.
+
+```{r}
+policy_date <- as.POSIXct("2025-01-05 00:00:00", tz = "America/New_York")
+
+hourly <- hourly %>%
+  mutate(
+    rel_month = 12 * (Yr - year(policy_date)) + (M - month(policy_date))
+  )
+```
+
+Here, `rel_month` measures months relative to the policy start (negative values are months before January 2025; -1 is December 2024). I focus on the last three pre-policy years for a readable pre-trend check.
+
+```{r}
+pre_data_small <- hourly %>%
+  filter(rel_month >= -36, rel_month < 0)   # last 36 months pre
+
+es <- feols(
+  log1p(Vol) ~ i(rel_month, treated, ref = -1) |
+    Boro + Yr + M + D + HH + dow,
+  data    = pre_data_small,
+  cluster = ~ Boro
+)
+
+iplot(es)
+```
+
+The plot below uses the last 36 pre-policy months and shows the estimated lead coefficients for Manhattan relative to the other boroughs; confidence intervals span zero in most leads, so I don't see a visible pre-trend break before January 2025. There is very wide uncertainty however, which may be an indicator of poor data quality.
+
+In the three years before 1/5/25, the treated group and the control boroughs do not show a clear pre-trend divergence in log traffic volumes. Parallel trends over this window look plausible, although, like said, these estimates are noisy.
+
+With pre-trends assessed, I estimate a sequence of borough-level DIDs: (1) full sample, (2) 2015+ only, (3) 2015+ excluding Staten Island, and (4) 2015+ excluding Staten Island and the COVID years.
+
+```{r}
+did <- feols(
+  log1p(Vol) ~ treated * post |
+    Boro + Yr + M + D + HH + dow,
+    data    = hourly,
+    cluster = ~ Boro
+)
+```
+
+```{r}
+hourly_15125 <- hourly %>% filter(Yr >= 2015)
+
+did_15125 <- feols(
+  log1p(Vol) ~ treated * post |
+    Boro + Yr + M + D + HH + dow,
+  data    = hourly_15125,
+  cluster = ~ Boro
+)
+```
+
+```{r}
+hourly_nosi <- hourly_15125 %>% filter(Boro != "Staten Island")
+
+did_nosi <- feols(
+  log1p(Vol) ~ treated * post |
+    Boro + Yr + M + D + HH + dow,
+  data    = hourly_nosi,
+  cluster = ~ Boro
+)
+```
+
+```{r}
+hourly_nosi_nocovid <- hourly %>%
+  filter(Yr >= 2015, Yr != 2020, Yr != 2021, Boro != "Staten Island")
+
+did_nosi_nocovid <- feols(
+  log1p(Vol) ~ treated * post |
+    Boro + Yr + M + D + HH + dow,
+  data    = hourly_nosi_nocovid,
+  cluster = ~ Boro
+)
+```
+
+To visualize group trajectories around the policy date, I plot monthly average log volumes for Manhattan versus the other boroughs.
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+plot_data <- hourly_nosi %>%
+  filter(Yr >= 2018) %>%
+  mutate(
+    group = ifelse(treated == 1, "Manhattan", "Other boroughs"),
+    month_date = floor_date(dttm, "month")
+  ) %>%
+  group_by(group, month_date) %>%
+  summarise(
+    mean_logVol = mean(log1p(Vol)),
+    .groups = "drop"
+  )
+
+ggplot(plot_data, aes(x = month_date, y = mean_logVol, color = group)) +
+  geom_line(alpha = 0.8) +
+  geom_vline(xintercept = as.Date("2025-01-05"), linetype = "dashed") +
+  labs(x = "Month", y = "Mean log(Vol + 1)", color = "Group") +
+  theme_minimal()
+```
+
+### Geometry-based DID (policy zone vs. rest)
+
+To align treatment more tightly with the policy area, I re-estimate the DID using the south-of-60th flag as treated and all other observations (north-of-60th Manhattan plus the other boroughs) as controls. This keeps the same time fixed effects as the borough model but assigns treatment only to the priced zone.
+
+```{r}
+did_zone <- feols(
+  log1p(Vol) ~ south60 * post |
+    Boro + Yr + M + D + HH + dow,
+  data    = hourly,
+  cluster = ~ Boro
+)
+
+beta_zone <- coef(did_zone)["south60:post"]
+pct_zone  <- (exp(beta_zone) - 1) * 100
+pct_zone
+```
+
+The `south60:post` coefficient captures the post-policy change in the priced zone relative to all other locations. The estimate corresponds to roughly `r round(pct_zone, 1)`% (95% CI: `r paste(round(confint(did_zone, "south60:post"), 3), collapse = ", ")`), with the same caveat that borough-level FEs leaves very few FEs.
+
+### Within-Manhattan DID (south of 60th Street)
+
+To tighten the treatment definition, I compare south-of-60th observations to north-of-60th observations within Manhattan only, controlling for week, hour, and day-of-week.
+
+```{r}
+hourly_manhattan <- hourly %>%
+  filter(Boro == "Manhattan") %>%
+  mutate(
+    week = floor_date(dttm, "week")
+  )
+
+did_south <- feols(
+  log1p(Vol) ~ south60 * post |
+    week + HH + dow,
+  data    = hourly_manhattan,
+  cluster = ~ week
+)
+
+beta_south <- coef(did_south)["south60:post"]
+pct_south  <- (exp(beta_south) - 1) * 100
+pct_south
+```
+
+The within-Manhattan estimate indicates an approximate change of `r round(pct_south, 1)`% for the priced zone relative to north-of-60th areas (95% CI: `r paste(round(confint(did_south, "south60:post"), 3), collapse = ", ")`), focusing solely on intra-Manhattan variation.
+
+The next plot shows weekly mean log volumes for the two Manhattan zones around the policy date.
+
+```{r}
+plot_south <- hourly_manhattan %>%
+  filter(Yr >= 2023) %>%
+  group_by(zone = manhattan_zone, week = floor_date(dttm, "week")) %>%
+  summarise(
+    mean_logVol = mean(log1p(Vol), na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(plot_south, aes(x = week, y = mean_logVol, color = zone)) +
+  geom_line(alpha = 0.7) +
+  geom_vline(xintercept = as.Date("2025-01-05"), linetype = "dashed") +
+  labs(
+    x = "Week",
+    y = "Mean log(Vol + 1)",
+    color = "Manhattan zone"
+  ) +
+  theme_minimal()
+```
+
+To check robustness to time aggregation and a cross-borough framing, I also collapse to borough-weeks (and later months) and re-estimate the DID.
+
+### Approach 2: Borough Weeks
+
+```{r}
+weekly <- hourly %>%
+  filter(Yr >= 2015, Boro != "Staten Island") %>%
+  mutate(
+    week = floor_date(dttm, "week"),
+    logVol = log1p(Vol)
+  ) %>%
+  group_by(Boro, week) %>%
+  summarise(
+    mean_logVol = mean(logVol, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    treated_zone = as.integer(Boro == "Manhattan"),
+    post = as.integer(week >= as.Date("2025-01-05"))
+  )
+
+did_week <- feols(
+  mean_logVol ~ treated_zone * post | Boro + week,
+  data    = weekly,
+  cluster = ~ Boro
+)
+```
+
+```{r}
+weekly_plot <- weekly %>%
+  mutate(group = ifelse(treated_zone == 1, "Manhattan zone", "Other boroughs")) %>%
+  group_by(group, week) %>%
+  summarise(mean_logVol = mean(mean_logVol, na.rm = TRUE), .groups = "drop")
+
+ggplot(weekly_plot, aes(x = week, y = mean_logVol, color = group)) +
+  geom_line(alpha = 0.8) +
+  geom_vline(xintercept = as.Date("2025-01-05"), linetype = "dashed") +
+  labs(x = "Week", y = "Mean log(Vol + 1)", color = "Group") +
+  theme_minimal()
+```
+
+Monthly aggregation provides an even smoother view of trends by group leading up to and following the policy start.
+
+```{r}
+monthly <- hourly %>%
+  filter(Yr >= 2023, Boro != "Staten Island") %>%
+  mutate(
+    month_date   = floor_date(dttm, "month"),
+    logVol       = log1p(Vol),
+    treated_zone = as.integer(Boro == "Manhattan"),
+    group        = ifelse(treated_zone == 1, "Manhattan", "Other boroughs")
+  ) %>%
+  group_by(group, month_date) %>%
+  summarise(
+    mean_logVol = mean(logVol, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(monthly, aes(x = month_date, y = mean_logVol, color = group)) +
+  geom_line(alpha = 0.7) +
+  geom_vline(xintercept = as.Date("2025-01-05"), linetype = "dashed") +
+  labs(
+    x = "Month",
+    y = "Mean log(Vol + 1)",
+    color = "Group"
+  ) +
+  theme_minimal()
+```
+
+## Results summary and interpretation
+
+The table below consolidates all model estimates: four borough-level specifications (full sample, 2015+, excluding Staten Island, excluding Staten Island and COVID), the geometry-based policy-zone DID, and the within-Manhattan south-vs-north DID. Coefficients are log-point estimates; PctChange reports the implied percent change.
+
+```{r}
+results_tbl <- tribble(
+  ~Model, ~Coef, ~LowerCI, ~UpperCI, ~PctChange,
+  "Manhattan vs. other boros (all years)", coef(did)["treated:post"], confint(did, "treated:post")[1, 1], confint(did, "treated:post")[1, 2], (exp(coef(did)["treated:post"]) - 1) * 100,
+  "Manhattan vs. other boros (2015+)", coef(did_15125)["treated:post"], confint(did_15125, "treated:post")[1, 1], confint(did_15125, "treated:post")[1, 2], (exp(coef(did_15125)["treated:post"]) - 1) * 100,
+  "No Staten Island (2015+)", coef(did_nosi)["treated:post"], confint(did_nosi, "treated:post")[1, 1], confint(did_nosi, "treated:post")[1, 2], (exp(coef(did_nosi)["treated:post"]) - 1) * 100,
+  "No Staten Island, no COVID (2015+)", coef(did_nosi_nocovid)["treated:post"], confint(did_nosi_nocovid, "treated:post")[1, 1], confint(did_nosi_nocovid, "treated:post")[1, 2], (exp(coef(did_nosi_nocovid)["treated:post"]) - 1) * 100,
+  "Geometry-based (south of 60th vs. rest)", coef(did_zone)["south60:post"], confint(did_zone, "south60:post")[1, 1], confint(did_zone, "south60:post")[1, 2], (exp(coef(did_zone)["south60:post"]) - 1) * 100,
+  "Within-Manhattan (south vs. north)", coef(did_south)["south60:post"], confint(did_south, "south60:post")[1, 1], confint(did_south, "south60:post")[1, 2], (exp(coef(did_south)["south60:post"]) - 1) * 100
+) %>%
+  mutate(
+    Coef = round(as.numeric(Coef), 3),
+    LowerCI = round(as.numeric(LowerCI), 3),
+    UpperCI = round(as.numeric(UpperCI), 3),
+    PctChange = round(as.numeric(PctChange), 1)
+  )
+
+knitr::kable(
+  results_tbl,
+  caption = "Diff-in-diff estimates: coefficients, confidence intervals, and implied percent changes",
+  booktabs = TRUE,
+  longtable = TRUE
+)
+```
+
+**Interpretation**
+
+-   Borough-level DIDs (rows 1–4) are small, imprecise, and not statistically significant. The post-policy change for Manhattan relative to other boroughs ranges from -1% to +31% depending on sample choice, with wide CIs.
+-   Geometry-based DID (row 5) that treats only the priced zone as treated is also near zero and imprecise (≈ -2%, CI includes sizable negatives and positives).
+-   Within-Manhattan DID (row 6) shows a large, statistically significant drop (\~79%) south of 60th relative to north, but relies on week-level temporal FEs and a small set of repeat sites. I am cautious to interpret this, especially due to the lack of data found in the treatment zone.
+
+**Identification and inference**
+
+Parallel trends were checked in pre-period graphing. We don't see any clear divergence, but these estimates are noisy. The borough-level spatial FEs I used implied only 5 of them. For stronger inference, I would need finer spatial FEs, like something at the neighborhood or block-level. Currently, I believe this to be one of the biggest hinderances to this analysis. Additionally, the camera locations change over time, so the shifts in where the sites are could be biasing results. This is visible in Manhattan where post-treatment data in the policy zone is far less available than outside the policy zone. I am also just limited by only six months of post data in the first place. These effects could improve with just more data over time.Without even a full year of data, this doesn't truly employ the monthly FEs used to control for seasonality.
+
+## Conclusions
+
+This analysis builds a set of diff-in-diff estimates to gauge the early effect of NYC's congestion pricing policy. I cleaned and aggregated the traffic data to hourly counts, defined treatment using both borough indicators and a geometry-based south-of-60th flag, checked pre-trends with event studies, and estimated effects across several samples and time aggregations. The within-Manhattan south-versus-north comparison is the tightest link to the policy zone, while the borough-wide models provide a broader citywide contrast. Further work could refine spatial precision and explore additional robustness checks, but my current pipeline offers a transparent baseline assessment. I believe it as a suitable starting point for further research.

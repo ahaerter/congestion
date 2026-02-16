@@ -1,0 +1,390 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[american]{babel}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{indentfirst}
+
+\usepackage{csquotes}
+\usepackage[authordate,backend=biber,url=true]{biblatex-chicago}
+\addbibresource{references.bib}
+
+% Load hyperref late to ensure all anchors are created
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+
+% Margins
+\usepackage[margin=1in]{geometry}
+
+% Double spacing
+\usepackage{setspace}
+\doublespacing
+
+% Optional: paragraph formatting
+\setlength{\parindent}{0.5in} % classic Word-style indent
+\setlength{\parskip}{0pt}     % no extra space between paragraphs
+
+\makeatletter
+
+\renewcommand*\singlespacing{%
+    \par    % ensure vertical mode
+    \null   % add fake line with previous leading still in force
+    \setstretch {\setspace@singlespace}% change leading
+    \nobreak
+    \vskip -\baselineskip   % compensate for the fake line we added, but with 
+                            % the new leading
+    \vskip \z@skip  % tell "\addvspace" and "\addpenalty" _not_ to remove the 
+                    % above correction
+}
+
+\makeatother
+
+
+\begin{document}
+\begin{titlepage}
+    \centering
+    
+    % push content down ~1/3 of the page
+    \vspace*{0.2\textheight}
+    
+    {\Large NYC Congestion Pricing:}\\[0.5em]
+    {\Large Honors Thesis Research Proposal}
+    \emph{v2.0}\\[4em]
+    
+    {\large Alejandro Haerter}\\[2em]
+    
+    {\large ECON 4494W -- ECON 4497W}\\[0.5em]
+    {\large Spring 2025 -- December 2026}\\[2em]
+    
+    {\large University of Connecticut}\\
+    
+    \vfill
+\end{titlepage}
+
+\subsection*{Motivation and Research Question}
+Traffic congestion is one of the most persistent challenges facing U.S. metropolitan
+areas, with wide-ranging social, economic, and environmental costs. It reduces
+quality of life, slows economic productivity, and contributes to pollution.
+From an economic perspective, the problem is straightforward: time and money lost
+in traffic are scarce resources that could be more productively allocated. For decades,
+economists have been searching for an optimal solution to congestion.
+
+Among urban areas, the New York City metro area---particularly encompassing the city's 
+five boroughs and its constituent suburban counties (e.g., Westchester County NY,
+Fairfield County CT)---provides a uniquely diverse landscape for analyzing congestion.
+The NYC metro area's transportation network garners the attention of the federal government,
+three state governments, and several regional agencies. 
+This results in an interesting mix of transportation policies, including toll-free highways, 
+traditional toll roads,
+public mass transit, and Manhattan's recently implemented congestion pricing.
+Historically, policymakers---often at the behest of advocacy groups---have approached the
+traffic congestion problem by expanding roadway and/or public transportation capacity.
+Unfortunately for this approach, the extant economics literature increasingly questions
+the efficacy of these traditional policy responses, noting little to no long-term decreases
+in congestion. While initially appearing unintuitive, multiple recent studies suggest
+that capacity expansions induce demand onto roadways by lowering travel costs, resulting
+in no net change in congestion. Public transit expansions often fail to significantly
+reduce congestion for this same reason; any substitution effect is simply negated by
+induced demand. These realizations have spurred transportation economists in a new direction:
+congestion pricing. Unfortunately, economists have only had theory to work with, because
+until 2025, there was no congestion pricing in the U.S.
+
+On January 5th, 2025, the borough of Manhattan introduced congestion pricing in an attempt
+to curb the infamous New York City traffic while also serving as a form of funding for the
+NYC public transportation system. 
+Given the economic theory, the diverse transportation network, and the new congestion pricing,
+I seek to answer: Does congestion pricing reduce highway congestion more effectively than
+road expansion and transit investment in the NYC metro area? If so, by how much?
+
+I propose the first empirical analysis of the efficacy congestion pricing in the U.S.
+This study would evaluate different government solutions with the goal to substantiate
+the claims made by transportation economic theory, where congestion pricing is considered
+the truly pragmatic optimal solution. I would have to compare
+infrastructure investments, toll-based strategies, and congestion pricing policies.
+
+\subsection*{Literature Review}
+The extant literature on traffic congestion comprehensively outlines the limitations of
+simple capacity expansions. Increasingly, especially over the last decade, the literature
+has been more interested in exploring congestion pricing as an optimal solution to road
+congestion.
+
+\textcite{Winston2006} measures the effects of highway spending on road users' congestion
+costs. Congestion costs are the economic losses caused by road traffic congestion. 
+They measure the difference between travel in free-flow conditions and travel under congested
+conditions. The study's results display dramatic inefficiency: an eleven cents reduction
+in road users' congestion costs per dollar of government highway spending
+\parencite[480]{Winston2006}.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.8\textwidth]{road_sd.png}
+  \caption{Supply and Demand for Road Traffic. Source: \textcite{Duranton2011}.}
+  \label{fig:mkt1}
+\end{figure}
+
+Critical work by \textcite{Duranton2011} expands on the disappointing result from
+\textcite{Winston2006} by offering a nation-wide econometric analysis.
+\textcite{Duranton2011} describes "[the] fundamental law
+of highway congestion: people drive more when the stock of roads in their city increases;
+commercial driving and trucking increase with a city's stock of roads; and people migrate
+to cities that are relatively well provided with road" (2618). This problem is illustrated by
+Figure \ref{fig:mkt1}, where $Q$ is vehicle kilometers traveled (VKT),
+$P(Q)$ is travel cost, and $R$ is the supply of roads. At equilibrium,
+$P(Q)$ is equal to supply curve $AC(R)$. So, an increase in road supply from $R$ to
+$R'$ moves the supply curve to $AC(R')$, thus decreasing travel cost, and proportionally
+inducing demand. There is no long-term congestion relief in this framework. 
+
+Unfortunately, two issues arise when considering mass transit as a congestion solution.
+First, the same induced demand principle applies for public transportation expansions;
+if a public transit expansion removes a subset of drivers from the roads, a new subset
+of drivers would simply take their place, returning to a congestion equilibrium
+\parencite[2636]{Duranton2011}. 
+Second, these expansions may not alter existing commuter behavior sufficiently
+in the first place. Short-run evidence from Chinese cities demonstrates that
+subway-induced congestion relief is strongest in close proximity to subway-stops, and
+only moves drivers away from already congested arterial roads \parencite[17]{Gu2021}.
+This is not good news for New York City mass transit investment. In the New York City
+suburbs, which are serious contributors to the city's congestion, mass transit is
+significantly more sparse. These areas are unlikely to benefit from congestion relief
+that capacity improvements could provide. For example, the ubiquitous New York City
+Subway primarily serves intra-city commuters; we would not expect subway capacity improvements
+to relieve congestion on surface roads comprising of commuters coming to and from the
+suburbs.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.8\textwidth]{road_sd2.png}
+  \caption{Supply and Demand for Road Traffic with Toll. Adapted from: \textcite{Duranton2011}.}
+  \label{fig:mkt2}
+\end{figure}
+
+With these discoveries in mind, I ought to conduct my research with serious scrutinization
+of road and mass transit capacity expansions as efficacious traffic solutions, and thus
+direct my attention to a very different solution: toll-based
+strategies. Tolls are deceptively simple; they may appear to only serve as revenue collection
+but are fundamentally able to reduce congestion. Recall the example from Figure \ref{fig:mkt1}.
+In this same example, imposing a roadway toll of  $t$ per-kilometer makes the average cost of
+travel more expensive, shifting the supply curve to $AC(R)+t$. A new equilibrium is found
+at a reduced $Q^{*t}$: the toll reduces traffic. This scenario is reflected in
+Figure \ref{fig:mkt2}. Most traditional toll systems, e.g., the E-ZPass system found in 
+New York and New Jersey, operate this way.
+
+Of course, this toll behaves like any Pigouvian per-unit 
+tax\footnote{See \textcite{Bento2009} for an exploration of congestion relief
+via gasoline tax, which theoretically behaves the same.},
+which unfortunately results in market inefficiency.
+By definition this is a suboptimal solution to traffic congestion, and this is where
+economists turn their attention to congestion pricing. \textcite{Winston2013} concludes:
+\begin{quote}
+    \singlespacing
+    Vehicles should be charged for their use of lane capacity that contributes to
+    congestion by paying efficient (marginal congestion) congestion tolls\ldots
+    out-of-pocket cost of commuting would no longer be underpriced, such tolls could
+    generate annual gains of \$40 billion, account for the travel time savings for
+    commuters, savings for taxpayers from lower costs of public services from greater
+    residential density, and greater revenues to the government. 
+    (787)
+\end{quote}
+
+Theoretically, a perfect congestion-pricing scheme charges an amount exactly equal
+to the marginal social cost (MSC) of a vehicle's trip, e.g., the contribution to 
+congestion, emissions, etc. That way, a socially efficient level
+of traffic is achieved. Of course, this is infeasible, and a second-best practical
+alternative involves only tolling some roads, using flat-rates, and revenue
+recycling \parencite{Parry2009}.
+The automated transponder-based toll technology available in
+2025 means this congestion toll would not require any additional infrastructure beyond a
+traditional toll, allowing relative ease of implementation.
+
+That being said, infrastructure installation is not the only obstacle to implementation.
+Political and equity considerations often pose
+significant implementation challenges; lower-income demographics may be disproportionately
+affected by congestion charges as they do not account for income. Additional, environmental
+benefits are modest at best. Public opinion is also a concern; worries over revenue use and
+perceived unfairness can delay or halt implementation \parencite{Anas2011,Lindsey2012}.
+
+The extant literature thus provides a clear answer as to why congestion pricing should be the
+primary interest of this research, but I need to caution for the potential drawbacks of congestion
+pricing as well and include these in my results.
+
+\subsection*{Data and Source Material}
+
+To quantitatively evaluate the impact of transportation spending policies on highway
+congestion, I will rely mostly on publicly available datasets. These will include
+traffic volume data from sources under the U.S. Department of Transportation's (USDOT) umbrella.
+Some examples include the Federal Highway Administration (FHWA), the Port Authority
+of New York and New Jersey (PANYNJ), the Metropolitan Transportation Authority (MTA),
+and of course state DOTs (NYSDOT, CTDOT, NJDOT). As mentioned in the introduction, the
+NYC metro area lies in three states, which means there are several government agencies---
+each with their own interests---involved. These agencies do not necessarily cooperate, and so
+a policy enacted in one state does not mean it will be enacted in another. An example is that
+highways in New York and New Jersey impose tolls, but tolls do not exist anywhere in Connecticut,
+despite also suffering from relatively high congestion caused by the commute to NYC.
+
+Road use/congestion data can be difficult as it can originate from multiple sources. While interstate
+highway data is relatively easy to obtain (directly from USDOT), smaller roads become more difficult.
+From my brief search, it appears road use datasets may originate at the municipal level. This
+could potentially make the data scope too large; upon beginning research I will have to decide if
+I need to narrow the scope of road use to interstate highway as done in \textcite{Duranton2011}.
+
+Congestion pricing is currently only in effect in the Congestion Relief Zone (CRZ), which
+is delineated by all Manhattan roads south of 60th street (i.e., everything south of Central Park),
+excluding the West Side Highway and FDR Drive.
+Toll-specific data regarding infrastructure, pricing, etc., will be obtained from the MTA.
+The MTA manages the congestion pricing network and several of the tolls for bridges and tunnels
+in New York City. Outside of NYC, tolls are managed by the state DOTs or PANYNJ. 
+
+Public transportation data, if required, comes from the MTA, CTDOT, or NJDOT, for their respective
+states. Ridership numbers are not often made publicly available besides an annual aggregate;
+if I decide to include public transport analysis in my research I may have to employ FOIA requests.
+
+Previous econometric literature \parencite{Duranton2011,Gu2021,Barwick2024} makes rigorous
+use of economic and demographic variables in their modeling, essential for controlling all of
+the confounding effects found in a cityscape. The U.S. Census Bureau's American Community Survey
+(ACS) is a good source for these. Variables such as population density, median household income,
+commuter modal choices, and commuting times come from other surveys that the U.S. Census conducts.
+
+Evidently, I am met with an abundance of datasets, which I will necessarily need to narrow to a
+feasible scope of research. Pooling these cross-sections may be incredibly difficult, especially
+without some sort of robust population control (likely nonexistent), so I will have to account
+for this difficulty when modeling.
+
+Finally, supplementary qualitative sources, including policy evaluations, governmental reports,
+and probably local planning documents, will provide context and insight into implementation details
+and political considerations influencing policy effectiveness. 
+
+
+\subsection*{Methodology}
+An econometric approach is necessary to evaluate these government solutions. This analysis
+lends itself to panel data regression modeling for a simpler approach; this may
+allow me to establish causal inference for the impacts of different policies on congestion
+levels. A large data panel should allow me to account for variations over time and in location,
+as well as to assist in controlling for unobserved heterogeneity.
+
+One preliminary econometric model might take the form of a differences-in-differences
+(DiD)\footnote{
+See \textcite{Gu2021} for an implementation of a stacked DiD model to measure congestion response,
+useful for when different cities enact the treatment at different times. If another U.S. city
+were to enact congestion pricing, we might use this model.} design,
+to compare the before-and-after of NYC congestion. In this model, both spatial and temporal
+variation are controlled for. Consider a simple two-way fixed-effects model: \singlespacing
+\begin{equation}
+    \text{Congestion}_{it} = \beta + \delta(Post_{t} \times Treat_{i})+ \mu_{i} + \lambda_{t} + \epsilon_{it},
+\end{equation}
+where:
+\begin{align*}
+    \text{Congestion}_{it} &= \text{some measure of traffic (average travel speed, VKT, throughput)}\\
+    \beta &= \text{intercept coefficient}\\
+    \delta &= \text{DiD coefficient}\\
+    \mu_i &= \text{spatial fixed effects}\\
+    \lambda_t &= \text{temporal fixed effects}\\
+    \epsilon_{it} &= \text{random error}.
+\end{align*}
+\doublespacing A significant DiD estimator $\delta$ means that the treated units (e.g., Manhattan) 
+had a change in congestion after policy implementation that \emph{was not} reflected in the controls.
+This model requires a nuanced variable selection. To begin with, the observation $i$
+depends on the choice of control variables. One comparison would be the CRZ against other places in the
+NYC metro area, including uptown Manhattan, other boroughs, and adjacent suburban towns. This approach
+could showcase a decrease in congestion in the CRZ that other areas do not, but this assumes
+that these controls will \emph{not} respond to congestion pricing at all. In reality, a significant portion
+of NYC area traffic is destined for the CRZ, and nearby boroughs and feeder towns may too experience
+a decrease in congestion. In this case, using surrounding areas as controls risks underestimating the true
+effect of congestion pricing, since the treatment indirectly benefits the controls.
+
+Thus, a larger model may be necessary, instead considering controls from areas outside of the NYC
+metro area. Areas from large cities with congestion issues, e.g., Chicago, Los Angeles, Atlanta, would
+serve as controls entirely unaffected by the CRZ. However, this framework introduces its own challenges.
+The central assumption in a DiD framework is parallel trends: that absent treatment, congestion in treated
+and control units would have evolved similarly. While other large metros share structural similarities 
+with New York—dense cores, high vehicle demand, multimodal transport systems—the evolution of their 
+congestion may differ due to local policy changes, infrastructure investment, or regional economic shocks.
+Therefore, including outside cities provides cleaner isolation from spillovers but raises questions about
+the validity of the parallel trends assumption. Pre-trend checks for parallelism would be necessary.
+
+A reasonable compromise is a hybrid approach: the primary specification compares Manhattan with nearby boroughs
+and suburban counties, while a secondary specification incorporates other large U.S. cities as robustness checks.
+If both designs yield consistent estimates of the CRZ’s effect, confidence in the results is strengthened; 
+if they diverge, the comparison helps identify whether spillovers or non-parallel trends drive the discrepancy.
+
+Provided I establish a relationship between congestion pricing and traffic, it is an
+interesting exercise to evaluate the extent of this impact. My intuition is that
+congestion pricing is unlikely to affect all surrounding areas equally: towns and boroughs closer to the CRZ
+are more directly linked to the Manhattan commuting flows and thus more likely to exhibit measurable changes,
+while distant suburbs may remain unaffected. To capture this gradient, the model can be augmented with an
+interaction between the post-treatment indicator and a continuous measure of distance from the CRZ:
+\begin{equation}
+    \text{Congestion}_{it} = \beta + \delta(Post_t \times Treat_i) + \theta(Post_t \times Distance_i) + \mu_i
+    + \lambda_t + \epsilon_{it},
+\end{equation}
+where $\theta$ captures how much the treatment effect decays as distance from Manhattan increases.
+A negative and significant $\theta$ would imply that congestion relief is concentrated near the CRZ and
+diminishes with distance, consistent with the intuition of a “spatial spillover gradient.” This
+specification recognizes that spillovers are not binary (treated vs. control) but continuous,
+and allows the model to account for the geography of commuting patterns across the NYC metropolitan area.
+
+Finally, an additional extension to this model would test a frequent criticism of congestion pricing,
+its disproportionate distributional/equity impacts \parencite{Barwick2024,Parry2009,Lindsey2012}.
+Consider:
+\begin{equation}
+    \text{Congestion}_{it} = \beta + \delta(Post_t \times Treat_i) + \phi(Post_t \times Wealth_i) + \mu_i
+    + \lambda_t + \epsilon_{it},
+\end{equation}
+The interaction term on $\phi$ interacts treatment with area-level income to test whether wealthier and
+poorer communities respond differently to congestion pricing. If theory holds, wealthier communities should
+be able to eat the toll (and thus, have less impact). Confounding is a potential issue here and may have
+to require the addition of the interaction term found in the distance model, if community wealth is somehow
+attributed to distance from the CRZ.
+
+It should be stated that (1), (2), and (3) are each preliminary models which will likely have additional
+complexity once the scope of the data is determined and overview statistics are computed. It is unlikely
+that I will be able to use so simple of a model for a robust result; but at the same time, more complex
+models require more data, and with congestion pricing only being introduced in 2025, this poses a
+significant challenge. The final model must find this balance, which I anticipate to be one of the
+most significant obstacles.
+
+Beyond the basic DiD, structural models are able to capture mechanisms, and simulate counterfactuals.
+\textcite{Brinkman2016} utilizes a structural spatial equilibrium model which
+simulates the effects of congestion pricing on Columbus, Ohio. This approach may be replicated
+to compare a simulation of his approach to the actual empirical effect observed by an econometric
+model on NYC. If the \textcite{Brinkman2016} model holds, it can confidently be used on other U.S.
+cities. What makes this model interesting is that it accounts for productivity losses which may
+be caused by agglomeration loss; congestion pricing disperses jobs away from concentrated districts
+affected by the toll. In Manhattan, where finance services cluster, this productivity loss risk
+is even greater than in Columbus. Testing Brinkman’s framework against NYC data could reveal whether
+the welfare ambiguity he predicts holds in larger, more clustered cities.
+
+\textcite{Barwick2024}'s equilibrium sorting model also lends itself to comparisons outside of NYC
+itself and into the surrounding metropolitan area. This study finds the most efficient result 
+is a combination of public transportation and congestion pricing \parencite[3200]{Barwick2024};
+while congestion pricing improves efficiency, it disproportionately burdens lower-income drivers.
+This result is highly relevant in NYC, where subway coverage is extensive but income inequality is
+high. Barwick's framework suggests that CRZ revenue recycled for transit could mitigate this welfare
+loss.
+
+Together, these structural approaches extend beyond simple econometric evaluation. Brinkman emphasizes
+the productivity–congestion trade-off, highlighting potential welfare ambiguity if agglomeration benefits
+are lost. Barwick emphasizes equity, showing how sorting across neighborhoods mediates the distributional
+effects of congestion pricing. Incorporating insights from both models allows my thesis not only to estimate
+the realized impact of NYC’s CRZ, but also to evaluate its broader implications for productivity and equity.
+In my opinion, the structural modeling approach is more informative and more interesting. However, 
+the aforementioned lack of post-treatment data severely limits the scope of my potential research.
+
+I aim to empirically clarify the effectiveness of these various transportation policies,
+particularly congestion pricing and tolling, in reducing surface road congestiona in the New York
+metro area by rigorously comparing different regional contexts. I can make preliminary guesses
+to model selection at this time as model construction will necessitate a thorough statistical
+process only possible with all relevant datasets.
+
+Given our location, this thesis should have particularly important implications for us in Connecticut.
+The ACS provides evidence that interstate traffic spills over off of highways and onto local
+roads, so the traffic generated by the NYC metro area may certainly affect the entirety of the
+state of Connecticut. Additionally, I hope, given that I find and understand some political policy
+alternatives to perhaps provide a recommendation as to what might work best for our state.
+
+\newpage
+\singlespacing
+\printbibliography
+
+\end{document}
