@@ -1,0 +1,11 @@
+name: conpy
+channels:
+  - conda-forge
+dependencies:
+  - folium
+  - numpy
+  - pandas
+  - pyogrio
+  - python=3.11
+  - scikit-learn
+  - scipy
