@@ -1,3 +1,5 @@
+*.pdf
+*.html
+*.csv
 
-/data/nyctraffic.csv
 .DS_Store

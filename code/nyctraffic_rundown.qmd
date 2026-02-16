@@ -1,0 +1,464 @@
+---
+title: "NYC Traffic Dataset Rundown (Python)"
+subtitle: "Descriptive Profile + Manhattan Treatment-Zone Coverage Check"
+format:
+  html:
+    toc: true
+    number-sections: true
+execute:
+  echo: true
+  warning: false
+  message: false
+jupyter: python3
+---
+
+## Objective
+
+This notebook does four things:
+
+1. Profiles the NYC traffic CSV with core descriptive statistics.
+2. Uses the data dictionary to identify the unit of observation.
+3. Checks whether locations behave like permanent sites or short-term count studies.
+4. Finds Manhattan treatment-zone locations with both pre- and post-policy data.
+
+Policy start date: **2025-01-05**.
+
+## Setup
+
+```{python}
+from pathlib import Path
+import re
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+sns.set_theme(style="whitegrid")
+
+data_dir = Path("../data")
+policy_date = pd.Timestamp("2025-01-05")
+
+# Prefer traffic2.csv if present; fallback to nyctraffic.csv
+if (data_dir / "traffic2.csv").exists():
+    csv_path = data_dir / "traffic2.csv"
+else:
+    csv_path = data_dir / "nyctraffic.csv"
+
+dict_path = data_dir / "Data_Dictionary_-_Automated_Traffic_Volume_Counts.xlsx"
+print("Using dataset:", csv_path)
+```
+
+## Read Data
+
+```{python}
+traffic = pd.read_csv(csv_path, low_memory=False)
+
+traffic["RequestID"] = pd.to_numeric(traffic["RequestID"], errors="coerce")
+traffic["Yr"] = pd.to_numeric(traffic["Yr"], errors="coerce")
+traffic["M"] = pd.to_numeric(traffic["M"], errors="coerce")
+traffic["D"] = pd.to_numeric(traffic["D"], errors="coerce")
+traffic["HH"] = pd.to_numeric(traffic["HH"], errors="coerce")
+traffic["MM"] = pd.to_numeric(traffic["MM"], errors="coerce")
+traffic["SegmentID"] = pd.to_numeric(traffic["SegmentID"], errors="coerce")
+traffic["Vol"] = pd.to_numeric(traffic["Vol"].astype(str).str.replace(",", "", regex=False), errors="coerce")
+
+traffic["date"] = pd.to_datetime(
+    dict(year=traffic["Yr"], month=traffic["M"], day=traffic["D"]),
+    errors="coerce"
+)
+traffic["datetime"] = pd.to_datetime(
+    dict(
+        year=traffic["Yr"], month=traffic["M"], day=traffic["D"],
+        hour=traffic["HH"], minute=traffic["MM"]
+    ),
+    errors="coerce"
+)
+
+traffic.shape
+```
+
+## Data Dictionary Check (Unit of Observation)
+
+```{python}
+try:
+    xls = pd.ExcelFile(dict_path)
+    print("Dictionary sheet names:", xls.sheet_names)
+
+    dict_info = pd.read_excel(dict_path, sheet_name="Dataset Info", header=None)
+    dict_cols = pd.read_excel(dict_path, sheet_name="Column Info", header=None)
+
+    print("\nDataset info sample:")
+    print(dict_info.iloc[:18, :2])
+
+    print("\nColumn info sample:")
+    print(dict_cols.iloc[:20, :4])
+except Exception as e:
+    print("Could not read dictionary workbook in Python:", repr(e))
+```
+
+Interpretation:
+
+- Unit of observation is a **15-minute traffic volume count**.
+- Counts come from NYC DOT Automated Traffic Recorders (ATRs).
+- This is **sample-based coverage** over time/space, not a balanced permanent-sensor panel.
+
+## Descriptive Statistics
+
+### Size, Time Span, and Core Counts
+
+```{python}
+core_summary = pd.DataFrame(
+    {
+        "metric": [
+            "Rows",
+            "Columns",
+            "Unique RequestID",
+            "Unique SegmentID",
+            "Unique (street, fromSt, toSt) triplets",
+            "Min date",
+            "Max date",
+        ],
+        "value": [
+            len(traffic),
+            traffic.shape[1],
+            traffic["RequestID"].nunique(dropna=True),
+            traffic["SegmentID"].nunique(dropna=True),
+            traffic[["street", "fromSt", "toSt"]].drop_duplicates().shape[0],
+            traffic["date"].min().date() if traffic["date"].notna().any() else pd.NaT,
+            traffic["date"].max().date() if traffic["date"].notna().any() else pd.NaT,
+        ],
+    }
+)
+core_summary
+```
+
+### Borough Composition
+
+```{python}
+boro_summary = (
+    traffic.groupby("Boro", dropna=False)
+    .size()
+    .reset_index(name="rows")
+    .assign(share_pct=lambda d: 100 * d["rows"] / d["rows"].sum())
+    .sort_values("rows", ascending=False)
+)
+boro_summary
+```
+
+### Volume Distribution
+
+```{python}
+vol_summary = traffic["Vol"].describe(percentiles=[0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99]).to_frame().T
+vol_summary
+```
+
+### Missingness
+
+```{python}
+missing_summary = (
+    traffic.isna().mean().rename("missing_pct").reset_index().rename(columns={"index": "column"})
+    .sort_values("missing_pct", ascending=False)
+)
+missing_summary
+```
+
+### Minute-Interval Check
+
+If the file were perfectly 15-minute aligned, `MM` would be only `{0, 15, 30, 45}`.
+
+```{python}
+minute_distribution = (
+    traffic.groupby("MM", dropna=False)
+    .size()
+    .reset_index(name="rows")
+    .assign(share_pct=lambda d: 100 * d["rows"] / d["rows"].sum())
+    .sort_values("MM")
+)
+minute_distribution
+```
+
+## Are Units Permanent Sensors or Temporary Counts?
+
+```{python}
+segment_day_coverage = (
+    traffic.groupby("SegmentID", dropna=True)["date"].nunique().reset_index(name="days_observed")
+)
+request_day_coverage = (
+    traffic.groupby("RequestID", dropna=True)["date"].nunique().reset_index(name="days_observed")
+)
+
+segment_day_coverage["days_observed"].describe(percentiles=[0.25, 0.5, 0.75, 0.95]).to_frame().T
+```
+
+```{python}
+request_day_coverage["days_observed"].describe(percentiles=[0.25, 0.5, 0.75, 0.95]).to_frame().T
+```
+
+## Pre/Post Policy Coverage
+
+```{python}
+pre_post_summary = (
+    traffic.assign(period=np.where(traffic["date"] < policy_date, "Pre", "Post"))
+    .groupby("period")
+    .size()
+    .reset_index(name="rows")
+)
+pre_post_summary["share_pct"] = 100 * pre_post_summary["rows"] / pre_post_summary["rows"].sum()
+pre_post_summary
+```
+
+## Manhattan Treatment-Zone Candidate Search (Python)
+
+Given missing Python geospatial libraries in this environment, this notebook uses a Python-only spatial proxy:
+
+1. Parse EPSG:2263 northing (`y`) directly from `WktGeom`.
+2. Calibrate the 60th-Street cutoff by Manhattan records whose street fields explicitly reference "60th Street".
+3. Define likely south-of-60th as `y <= median(y at 60th Street)`.
+4. Exclude FDR / West Side Highway proxies by name.
+5. Keep segments with both pre and post observations.
+
+```{python}
+manhattan = traffic.loc[traffic["Boro"].eq("Manhattan")].copy()
+for c in ["street", "fromSt", "toSt", "Direction", "WktGeom"]:
+    manhattan[c] = manhattan[c].astype(str)
+
+xy_pat = re.compile(r"POINT\s*\(([-0-9\.]+)\s+([-0-9\.]+)\)")
+manhattan[["x", "y"]] = manhattan["WktGeom"].str.extract(xy_pat).astype(float)
+
+street60_pat = re.compile(r"\b(?:EAST|WEST|E|W)?\s*60(?:TH)?\s*(?:ST|STREET)\b", re.IGNORECASE)
+mask_60 = (
+    manhattan["street"].str.contains(street60_pat, na=False)
+    | manhattan["fromSt"].str.contains(street60_pat, na=False)
+    | manhattan["toSt"].str.contains(street60_pat, na=False)
+)
+
+y_threshold = manhattan.loc[mask_60, "y"].median()
+
+exclude_pat = r"FDR|WEST SIDE|BATTERY PARK UNDERPASS|FDR DRIVE|WEST ST|11 AVE|12 AVE|HENRY HUDSON"
+mask_excl = (
+    manhattan["street"].str.contains(exclude_pat, case=False, regex=True, na=False)
+    | manhattan["fromSt"].str.contains(exclude_pat, case=False, regex=True, na=False)
+    | manhattan["toSt"].str.contains(exclude_pat, case=False, regex=True, na=False)
+)
+
+manhattan["south60_proxy"] = (manhattan["y"] <= y_threshold) & (~mask_excl)
+
+segment_span = (
+    manhattan.groupby("SegmentID", dropna=True)
+    .agg(
+        min_date=("date", "min"),
+        max_date=("date", "max"),
+        pre_days=("date", lambda s: s[s < policy_date].nunique()),
+        post_days=("date", lambda s: s[s >= policy_date].nunique()),
+        n_days=("date", "nunique"),
+        south60_proxy=("south60_proxy", "max"),
+        street=("street", "first"),
+        fromSt=("fromSt", "first"),
+        toSt=("toSt", "first"),
+        Direction=("Direction", "first"),
+    )
+    .reset_index()
+)
+
+treatment_candidates = (
+    segment_span.loc[
+        segment_span["south60_proxy"]
+        & (segment_span["min_date"] < policy_date)
+        & (segment_span["max_date"] >= policy_date)
+    ]
+    .sort_values(["post_days", "pre_days", "n_days"], ascending=False)
+)
+
+print("y-threshold (EPSG:2263 northing at ~60th Street):", y_threshold)
+treatment_candidates.head(20)
+```
+
+```{python}
+out_candidates = data_dir / "manhattan_south60_candidates_python.csv"
+treatment_candidates.to_csv(out_candidates, index=False)
+out_candidates
+```
+
+## Focus Site: Segment 159016 (East Houston St, EB)
+
+```{python}
+focus_segment = 159016
+focus_data = traffic.loc[traffic["SegmentID"].eq(focus_segment)].copy()
+focus_data["period"] = np.where(focus_data["date"] < policy_date, "Pre", "Post")
+focus_data["hour_bin"] = focus_data["HH"]
+
+focus_meta = pd.DataFrame(
+    {
+        "SegmentID": [focus_segment],
+        "Boro": [focus_data["Boro"].iloc[0] if len(focus_data) else np.nan],
+        "street": [focus_data["street"].iloc[0] if len(focus_data) else np.nan],
+        "fromSt": [focus_data["fromSt"].iloc[0] if len(focus_data) else np.nan],
+        "toSt": [focus_data["toSt"].iloc[0] if len(focus_data) else np.nan],
+        "Direction": [focus_data["Direction"].iloc[0] if len(focus_data) else np.nan],
+        "first_date": [focus_data["date"].min()],
+        "last_date": [focus_data["date"].max()],
+        "rows": [len(focus_data)],
+        "days": [focus_data["date"].nunique()],
+    }
+)
+focus_meta
+```
+
+```{python}
+focus_pre_post = (
+    focus_data.groupby("period")
+    .agg(
+        rows=("Vol", "size"),
+        unique_days=("date", "nunique"),
+        mean_vol=("Vol", "mean"),
+        median_vol=("Vol", "median"),
+        p25_vol=("Vol", lambda s: s.quantile(0.25)),
+        p75_vol=("Vol", lambda s: s.quantile(0.75)),
+    )
+    .reset_index()
+)
+focus_pre_post
+```
+
+```{python}
+focus_daily = (
+    focus_data.groupby("date")
+    .agg(
+        day_total_vol=("Vol", "sum"),
+        day_mean_15min_vol=("Vol", "mean"),
+        n_intervals=("Vol", "size"),
+    )
+    .reset_index()
+    .sort_values("date")
+)
+
+fig, ax = plt.subplots(figsize=(9, 4.5))
+ax.plot(focus_daily["date"], focus_daily["day_total_vol"], marker="o", linewidth=1.2)
+ax.axvline(policy_date, linestyle="--", color="red")
+ax.set_title("Segment 159016: Daily Total Volume")
+ax.set_xlabel("Date")
+ax.set_ylabel("Daily total volume")
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+focus_hourly_profile = (
+    focus_data.groupby(["period", "hour_bin"])
+    .agg(
+        mean_vol=("Vol", "mean"),
+        median_vol=("Vol", "median"),
+    )
+    .reset_index()
+    .sort_values(["period", "hour_bin"])
+)
+focus_hourly_profile
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(9, 4.5))
+for period, g in focus_hourly_profile.groupby("period"):
+    ax.plot(g["hour_bin"], g["mean_vol"], marker="o", linewidth=1.2, label=period)
+ax.set_xticks(range(0, 24, 2))
+ax.set_title("Segment 159016: Mean 15-minute Volume by Hour")
+ax.set_xlabel("Hour of day")
+ax.set_ylabel("Mean 15-minute volume")
+ax.legend(title="Period")
+plt.tight_layout()
+plt.show()
+```
+
+### Sampling Sparsity Across the 7-Year Span
+
+```{python}
+focus_days = (
+    focus_data[["date"]]
+    .drop_duplicates()
+    .sort_values("date")
+    .reset_index(drop=True)
+)
+focus_days["gap_from_previous_days"] = focus_days["date"].diff().dt.days
+focus_days["year"] = focus_days["date"].dt.year
+focus_days
+```
+
+```{python}
+focus_gap_summary = pd.DataFrame(
+    {
+        "sampled_days": [len(focus_days)],
+        "first_date": [focus_days["date"].min()],
+        "last_date": [focus_days["date"].max()],
+        "span_days": [(focus_days["date"].max() - focus_days["date"].min()).days],
+        "mean_gap_days": [focus_days["gap_from_previous_days"].mean(skipna=True)],
+        "median_gap_days": [focus_days["gap_from_previous_days"].median(skipna=True)],
+        "p25_gap_days": [focus_days["gap_from_previous_days"].quantile(0.25)],
+        "p75_gap_days": [focus_days["gap_from_previous_days"].quantile(0.75)],
+        "max_gap_days": [focus_days["gap_from_previous_days"].max(skipna=True)],
+    }
+)
+focus_gap_summary
+```
+
+```{python}
+focus_days_by_year = (
+    focus_days.groupby("year").size().rename("sampled_days").reset_index()
+)
+all_years = pd.DataFrame({"year": np.arange(focus_days_by_year["year"].min(), focus_days_by_year["year"].max() + 1)})
+focus_days_by_year = all_years.merge(focus_days_by_year, on="year", how="left").fillna({"sampled_days": 0})
+focus_days_by_year["sampled_days"] = focus_days_by_year["sampled_days"].astype(int)
+focus_days_by_year
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(9, 4.5))
+ax.bar(focus_days_by_year["year"], focus_days_by_year["sampled_days"], color="#4c78a8")
+ax.set_title("Segment 159016: Number of Sampled Days per Year")
+ax.set_xlabel("Year")
+ax.set_ylabel("Distinct sampled days")
+plt.tight_layout()
+plt.show()
+```
+
+### Simple Pre/Post Effect Size (Bootstrap)
+
+```{python}
+rng = np.random.default_rng(5312)
+
+focus_day_totals = (
+    focus_data.groupby(["date", "period"])
+    .agg(day_total_vol=("Vol", "sum"))
+    .reset_index()
+)
+
+pre_vals = focus_day_totals.loc[focus_day_totals["period"].eq("Pre"), "day_total_vol"].to_numpy()
+post_vals = focus_day_totals.loc[focus_day_totals["period"].eq("Post"), "day_total_vol"].to_numpy()
+
+obs_pct_change = (post_vals.mean() / pre_vals.mean() - 1) * 100
+
+B = 5000
+boot_pct = np.empty(B)
+for i in range(B):
+    pre_b = rng.choice(pre_vals, size=len(pre_vals), replace=True)
+    post_b = rng.choice(post_vals, size=len(post_vals), replace=True)
+    boot_pct[i] = (post_b.mean() / pre_b.mean() - 1) * 100
+
+bootstrap_summary = pd.DataFrame(
+    {
+        "metric": [
+            "Observed % change (post vs pre)",
+            "Bootstrap 2.5%",
+            "Bootstrap 97.5%",
+        ],
+        "value": [obs_pct_change, np.quantile(boot_pct, 0.025), np.quantile(boot_pct, 0.975)],
+    }
+)
+bootstrap_summary
+```
+
+## Findings
+
+- Unit of observation: one row is a 15-minute traffic count for a specific segment/location/direction.
+- Data is best interpreted as sampled ATR count campaigns, not a fully balanced permanent counter panel.
+- Post-policy coverage remains limited relative to pre-policy.
+- Python treatment-zone proxy yields one segment with both pre/post observations: `SegmentID 159016` (East Houston St, EB).
+- This site is sparse over time: 15 sampled days over a 7-year span, concentrated in two short bursts (2018 and 2025).
